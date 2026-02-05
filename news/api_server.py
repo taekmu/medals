@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
+from fastapi.responses import FileResponse
+
 app = FastAPI()
 
 
@@ -25,7 +27,8 @@ medals = [
     {"country": "France", "gold": 10, "silver": 11, "bronze": 16},          
     {"country": "Italy", "gold": 10, "silver": 11, "bronze": 16},
 ]
-@app.get("/medals")
+#@app.get("/medals")
+@app.get("/")
 def get_medal():
     return medals
 
