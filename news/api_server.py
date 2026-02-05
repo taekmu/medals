@@ -30,4 +30,4 @@ def get_medal():
     return medals
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/", StaticFiles(directory="static", html=True))
+#app.mount("/", StaticFiles(directory="static", html=True))
