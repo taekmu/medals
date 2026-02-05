@@ -38,3 +38,8 @@ app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 #app.mount("/static", StaticFiles(directory="static"), name="static")
 #app.mount("/", StaticFiles(directory="static", html=True))
+
+
+print(f"현재 BASE_DIR: {BASE_DIR}")
+print(f"설정된 static_path: {static_path}")
+print(f"폴더 존재 여부: {os.path.exists(static_path)}")
