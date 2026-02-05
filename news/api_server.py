@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-
+import os
 app = FastAPI()
 
 
@@ -29,5 +29,12 @@ medals = [
 def get_medal():
     return medals
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+
+#new폴더에 있으므로 서버위치 경로를 설정함
+# 현재 파일(api_server.py)의 위치를 기준으로 절대 경로를 설정합니다.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+static_path = os.path.join(BASE_DIR, "static")
+app.mount("/static", StaticFiles(directory=static_path), name="static")
+
+#app.mount("/static", StaticFiles(directory="static"), name="static")
 #app.mount("/", StaticFiles(directory="static", html=True))
