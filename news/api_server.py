@@ -3,8 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/", StaticFiles(directory="static", html=True))
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,3 +28,6 @@ medals = [
 @app.get("/medals")
 def get_medal():
     return medals
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/", StaticFiles(directory="static", html=True))
