@@ -29,8 +29,6 @@ medals = [
 ]
 #@app.get("/medals")
 @app.get("/")
-async def read_index():
-    return FileResponse(os.path.join(static_path, 'index.html'))
 
 def get_medal():
     return medals
@@ -40,8 +38,8 @@ def get_medal():
 # 현재 파일(api_server.py)의 위치를 기준으로 절대 경로를 설정합니다.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 static_path = os.path.join(BASE_DIR, "static")
-#app.mount("/static", StaticFiles(directory=static_path), name="static")
-#app.mount("/", StaticFiles(directory=static_path, html=True), name="root")
+app.mount("/static", StaticFiles(directory=static_path), name="static")
+app.mount("/", StaticFiles(directory=static_path, html=True), name="root")
 
 
 print(f"현재 BASE_DIR: {BASE_DIR}", flush=True)
