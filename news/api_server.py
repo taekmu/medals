@@ -27,8 +27,7 @@ medals = [
     {"country": "France", "gold": 10, "silver": 11, "bronze": 16},          
     {"country": "Italy", "gold": 10, "silver": 11, "bronze": 16},
 ]
-#@app.get("/medals")
-@app.get("/")
+@app.get("/medals")
 
 def get_medal():
     return medals
@@ -39,7 +38,12 @@ def get_medal():
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 static_path = os.path.join(BASE_DIR, "static")
 app.mount("/static", StaticFiles(directory=static_path), name="static")
-app.mount("/", StaticFiles(directory=static_path, html=True), name="root")
+#app.mount("/", StaticFiles(directory=static_path, html=True), name="root")
+
+@app.get("/")
+async def read_index():
+    index_path = os.path.join(static_path, "index.html")
+    return FileResponse(index_path)
 
 
 print(f"현재 BASE_DIR: {BASE_DIR}", flush=True)
