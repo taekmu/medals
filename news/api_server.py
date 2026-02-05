@@ -37,9 +37,6 @@ static_path = os.path.join(BASE_DIR, "static")
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 app.mount("/", StaticFiles(directory=static_path, html=True), name="root")
 
-#app.mount("/static", StaticFiles(directory="static"), name="static")
-#app.mount("/", StaticFiles(directory="static", html=True))
-
 
 print(f"현재 BASE_DIR: {BASE_DIR}", flush=True)
 print(f"설정된 static_path: {static_path}", flush=True)
