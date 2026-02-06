@@ -36,7 +36,6 @@ async def test_medal():
         "files_found": files_in_static,
         "current_dir": os.getcwd()
     }
-
 medals = [
     {"country": "USA", "gold": 39, "silver": 41, "bronze": 33},
     {"country": "China", "gold": 38, "silver": 32, "bronze": 18},
@@ -50,17 +49,31 @@ medals = [
     {"country": "Italy", "gold": 10, "silver": 11, "bronze": 16},
 ]
 @app.get("/medals")
+async def medals():
+    medal_file = os.path.join(static_path, "index.html")
+    if os.path.exists(medal_file):
+        return FileResponse(medal_file)
+    
+    # 파일이 없을 경우 디버깅 정보 출력
+    files_in_static = os.listdir(static_path) if os.path.exists(static_path) else "static 폴더 없음"
+    return {
+        "status": "error",
+        "message": "medal.html을 찾을 수 없습니다.",
+        "checked_path": medal_file,
+        "files_found": files_in_static,
+        "current_dir": os.getcwd()
+    }
 
-def get_medal():
-    return medals
 
+#def get_medal():  지금 수정 do(2026-02-06)
+#    return medals : 지금 수정 do(2026-02-06)
 
 #app.mount("/static", StaticFiles(directory=static_path), name="static")  지금 수정 do(2026-02-06)
 #app.mount("/", StaticFiles(directory=static_path, html=True), name="root")
 
 # 3. 정적 파일 마운트 (가장 마지막에)
-if os.path.exists(static_path):
-    app.mount("/static", StaticFiles(directory=static_path), name="static")
+#if os.path.exists(static_path):지금 수정 do(2026-02-06)
+#    app.mount("/static", StaticFiles(directory=static_path), name="static")지금 수정 do(2026-02-06)
 
 
 @app.get("/")
