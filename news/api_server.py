@@ -50,44 +50,46 @@ medals = [
     {"country": "Italy", "gold": 10, "silver": 11, "bronze": 16},
 ]
 @app.get("/medals")
-
-
 async def medals():
     medal_file = os.path.join(static_path, "medal.html")
+    
+    # 1. 파일이 존재하는지 확인
     if os.path.exists(medal_file):
-        # --- 여기서부터 수정: 파일을 보내는 대신 내용을 읽습니다 ---
-        with open(medal_file, "r", encoding="utf-8") as f:
-            html_content = f.read()
-        
-        soup = BeautifulSoup(html_content, 'html.parser')
-        medal_data = []
-        
-        # medal.html의 <tr> 태그 중 클래스가 'country-row'인 것들을 모두 찾음
-        rows = soup.select(".country-row") 
-        
-        for row in rows:
-            try:
-                # 각 행 안에서 데이터를 추출하여 리스트에 담기
-                medal_data.append({
-                    "country": row.select_one(".name").get_text(strip=True),
-                    "gold": row.select_one(".gold").get_text(strip=True),
-                    "silver": row.select_one(".silver").get_text(strip=True),
-                    "bronze": row.select_one(".bronze").get_text(strip=True)
-                })
-            except AttributeError:
-                continue # 클래스명이 없는 행은 건너뜁니다.
-        
-        return medal_data # 최종적으로 JSON 리스트를 반환!
-        # --- 여기까지 수정 완료 ---
+        try:
+            with open(medal_file, "r", encoding="utf-8") as f:
+                html_content = f.read()
+            
+            soup = BeautifulSoup(html_content, 'html.parser')
+            medal_data = []
+            
+            # 2. 크롤링 로직: medal.html의 태그를 찾음
+            rows = soup.select(".country-row") 
+            
+            for row in rows:
+                # 안전하게 데이터를 추출 (태그가 없으면 에러 방지)
+                name_tag = row.select_one(".name")
+                gold_tag = row.select_one(".gold")
+                silver_tag = row.select_one(".silver")
+                bronze_tag = row.select_one(".bronze")
+                
+                if name_tag:
+                    medal_data.append({
+                        "country": name_tag.get_text(strip=True),
+                        "gold": gold_tag.get_text(strip=True) if gold_tag else "0",
+                        "silver": silver_tag.get_text(strip=True) if silver_tag else "0",
+                        "bronze": bronze_tag.get_text(strip=True) if bronze_tag else "0"
+                    })
+            
+            # 3. 데이터가 성공적으로 뽑혔다면 리스트 반환
+            return medal_data 
 
-    # 파일이 없을 경우 디버깅 정보 출력 (기존 유지)
-    files_in_static = os.listdir(static_path) if os.path.exists(static_path) else "static 폴더 없음"
-    return {
-        "status": "error",
-        "message": "medal.html을 찾을 수 없습니다.",
-        "checked_path": medal_file,
-        "files_found": files_in_static
-    }
+        except Exception as e:
+            print(f"Parsing Error: {e}")
+            return [] # 에러 시 빈 리스트 반환 (위젯 멈춤 방지)
+
+    # 4. 파일이 아예 없을 때도 위젯이 'forEach' 에러 안 나게 빈 리스트 반환
+    print(f"File not found at: {medal_file}")
+    return []
     
     ''' 수정전 원본 데이터
     if os.path.exists(medal_file):
