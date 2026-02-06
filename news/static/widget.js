@@ -1,75 +1,52 @@
 (function () {
-  const container = document.currentScript.parentElement;
+  // 스크립트가 삽입된 위치의 부모 요소를 찾습니다.
+  const container = document.currentScript ? document.currentScript.parentElement : document.body;
 
+  // 1. 초기 로딩 화면 표시
+  container.innerHTML = `
+    <div id="medal-loader" style="padding:40px 20px; text-align:center; color:#64748b; font-size:0.9rem;">
+      <div style="font-size:2rem; margin-bottom:10px;">📡</div>
+      데이터를 불러오는 중입니다...
+    </div>`;
+
+  // 2. 데이터 가져오기 (상대 경로 /medals 사용)
   fetch("/medals")
-    .then(res => res.json())
+    .then(res => {
+      if (!res.ok) throw new Error("서버 응답 오류");
+      return res.json();
+    })
     .then(data => {
-      // 모바일 최적화 스타일 정의
+      // 데이터가 비어있을 경우 처리
+      if (!data || data.length === 0) {
+        container.innerHTML = "<div style='padding:20px; text-align:center;'>표시할 메달 데이터가 없습니다.</div>";
+        return;
+      }
+
+      // 3. HTML 틀 만들기
       let html = `
-        <div style="
-          font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
-          width: 100%;
-          max-width: 100%;
-          margin: 10px auto;
-          background: #ffffff;
-          border-radius: 20px;
-          box-shadow: 0 8px 30px rgba(0,0,0,0.08);
-          overflow: hidden;
-          border: 1px solid #efefef;
-          -webkit-tap-highlight-color: transparent;
-        ">
-          <div style="
-            background: linear-gradient(135deg, #2563eb, #1d4ed8);
-            color: white;
-            padding: 18px 20px;
-            text-align: left;
-          ">
-            <h3 style="margin:0; font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-              <span>🏅</span> 실시간 메달 순위...
-            </h3>
-            <p style="margin:4px 0 0; font-size: 0.75rem; opacity: 0.85;">실시간 자동 업데이트 중</p>
+        <div style="font-family: sans-serif; width: 100%; max-width: 400px; margin: 10px auto; background: #fff; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; border: 1px solid #eee;">
+          <div style="background: #2563eb; color: white; padding: 15px; text-align: center;">
+            <h3 style="margin:0; font-size: 1.1rem;">🏅 실시간 메달 순위</h3>
           </div>
-          
-          <div style="padding: 5px 0;">
+          <div style="padding: 10px;">
       `;
 
+      // 4. 반복문으로 국가별 행 추가
       data.forEach((team, index) => {
-        const isTop3 = index < 3;
-        const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32']; // 금, 은, 동 색상
-        
+        // 혹시 서버에서 데이터가 깨져서 올 경우를 대비해 기본값('0') 설정
+        const country = team.country || "미정";
+        const gold = team.gold || "0";
+        const silver = team.silver || "0";
+        const bronze = team.bronze || "0";
+
         html += `
-          <div style="
-            display: flex;
-            align-items: center;
-            padding: 15px 20px;
-            border-bottom: ${index === data.length - 1 ? 'none' : '1px solid #f8f9fa'};
-            transition: background 0.2s;
-          " onclick="this.style.background='#f0f4ff'; setTimeout(()=>this.style.background='transparent', 200);">
-            
-            <span style="
-              width: 28px; 
-              font-weight: 800; 
-              color: ${isTop3 ? '#1e293b' : '#94a3b8'};
-              font-size: 1rem;
-            ">${index + 1}</span>
-            
-            <div style="flex: 1; font-weight: 600; color: #334155; margin-left: 10px; font-size: 1rem;">
-              ${team.country}
-            </div>
-            
-            <div style="display: flex; gap: 10px; text-align: center;">
-              <div style="width: 32px;">
-                <div style="font-weight: 700; color: #d4af37; font-size: 1.05rem;">${team.gold}</div>
-                <div style="font-size: 0.65rem; color: #94a3b8; margin-top: 1px;">금</div>
-              </div>
-              <div style="width: 32px;">
-                <div style="font-weight: 700; color: #94a3b8; font-size: 1.05rem;">${team.silver}</div>
-                <div style="font-size: 0.65rem; color: #94a3b8; margin-top: 1px;">은</div>
-              </div>
-              <div style="width: 32px;">
-                <div style="font-weight: 700; color: #b45309; font-size: 1.05rem;">${team.bronze}</div>
-                <div style="font-size: 0.65rem; color: #94a3b8; margin-top: 1px;">동</div>
-              </div>
+          <div style="display: flex; align-items: center; padding: 12px 10px; border-bottom: 1px solid #f0f0f0;">
+            <span style="width: 25px; font-weight: bold; color: #666;">${index + 1}</span>
+            <div style="flex: 1; font-weight: bold; color: #333;">${country}</div>
+            <div style="display: flex; gap: 8px; text-align: center; font-size: 0.9rem;">
+              <div style="width: 30px;"><div style="color: #d4af37; font-weight: bold;">${gold}</div></div>
+              <div style="width: 30px;"><div style="color: #94a3b8; font-weight: bold;">${silver}</div></div>
+              <div style="width: 30px;"><div style="color: #b45309; font-weight: bold;">${bronze}</div></div>
             </div>
           </div>
         `;
@@ -77,28 +54,20 @@
 
       html += `
           </div>
-          <div style="
-            background: #f1f5f9;
-            padding: 16px;
-            text-align: center;
-            font-size: 0.9rem;
-            color: #2563eb;
-            cursor: pointer;
-            font-weight: 700;
-            border-top: 1px solid #e2e8f0;
-          " onclick="alert('전체 순위 페이지로 이동합니다')">
-            전체 순위 더보기
+          <div style="background: #f8fafc; padding: 10px; text-align: center; font-size: 0.8rem; color: #94a3b8;">
+            자동 업데이트 활성화됨
           </div>
         </div>
       `;
 
+      // 5. 로더를 지우고 실제 표를 삽입
       container.innerHTML = html;
     })
     .catch(err => {
+      console.error("Widget Error:", err);
       container.innerHTML = `
-        <div style='padding:40px 20px; text-align:center; color:#64748b; font-size:0.9rem;'>
-          <div style='font-size:2rem; margin-bottom:10px;'>📡</div>
-          데이터를 연결하는 중입니다...
+        <div style="padding:20px; text-align:center; color:#ef4444; font-size:0.85rem;">
+          ⚠️ 연결 실패: ${err.message}<br>잠시 후 새로고침 해주세요.
         </div>`;
     });
 })();
