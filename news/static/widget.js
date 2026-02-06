@@ -8,8 +8,8 @@
       let html = `
         <div style="
           font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
-          width: 95%;
-          max-width: 400px;
+          width: 100%;
+          max-width: 100%;
           margin: 10px auto;
           background: #ffffff;
           border-radius: 20px;
@@ -25,7 +25,7 @@
             text-align: left;
           ">
             <h3 style="margin:0; font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-              <span>🏅</span> 실시간 메달 순위
+              <span>🏅</span> 실시간 메달 순위...
             </h3>
             <p style="margin:4px 0 0; font-size: 0.75rem; opacity: 0.85;">실시간 자동 업데이트 중</p>
           </div>
