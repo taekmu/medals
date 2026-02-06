@@ -20,3 +20,26 @@ https://dashboard.render.com/login
 Start Command
 uvicorn api_server:app --host 0.0.0.0 --port $PORT
 
+✅ 가장 쉬운 방법 (FastAPI에 정적파일 추가)
+프로젝트에 static 폴더 만들기
+news/
+  api_server.py
+  requirements.txt
+  static/
+      widget.js
+
+2️⃣ api_server.py 수정 ⭐⭐⭐
+
+맨 위 import 추가
+
+from fastapi.staticfiles import StaticFiles
+
+
+그리고 app = FastAPI() 아래
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+3️⃣ Git push
+git add .
+git commit -m "add widget"
+git push
