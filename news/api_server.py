@@ -72,8 +72,8 @@ async def medals():
 #app.mount("/", StaticFiles(directory=static_path, html=True), name="root")
 
 # 3. 정적 파일 마운트 (가장 마지막에)
-#if os.path.exists(static_path):지금 수정 do(2026-02-06)
-#    app.mount("/static", StaticFiles(directory=static_path), name="static")지금 수정 do(2026-02-06)
+if os.path.exists(static_path):
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 
 @app.get("/")
