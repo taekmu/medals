@@ -3,123 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1e40af">
+
     <title>실시간 메달보드</title>
     <style>
-        body {
-            margin: 0;
+        /* CSS 영역: 여기에 webkit 설정을 넣어야 에러가 안 납니다 */
+        body { 
+            margin: 0; 
             padding: 0;
-            background-color: #f1f5f9; /* 배경색을 연한 회색으로 주어 카드 디자인 강조 */
-            display: flex;
-            justify-content: center;
-            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background-color: #f1f5f9; 
+            font-family: 'Pretendard', sans-serif;
+            /* 앱처럼 텍스트 드래그 방지 (에러 수정됨) */
+            -webkit-user-select: none; 
+            user-select: none; 
         }
-        #app-container {
-            width: 100%;
-            max-width: 500px; /* 노트의 큰 화면에서도 너무 퍼지지 않게 조절 */
-            min-height: 100vh;
-            padding: 20px 15px;
-            box-sizing: border-box;
+        #app-container { padding: 20px 15px; width: 100%; box-sizing: border-box; }
+        .board-card {
+            background: #ffffff;
+            border-radius: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
         }
     </style>
 </head>
 <body>
     <div id="app-container">
-        <div id="medal-board"></div>
+        <div id="medal-board" class="board-card">데이터를 불러오는 중...</div>
     </div>
 
     <script>
+        // 자바스크립트 영역: 여기에 CSS를 넣으면 에러가 납니다.
         (function () {
             const container = document.getElementById('medal-board');
-
             fetch("https://medalboard.onrender.com/medals")
                 .then(res => res.json())
                 .then(data => {
                     let html = `
-                        <div style="
-                            background: #ffffff;
-                            border-radius: 24px;
-                            box-shadow: 0 12px 40px rgba(0,0,0,0.12);
-                            overflow: hidden;
-                            border: 1px solid rgba(0,0,0,0.05);
-                        ">
-                            <div style="
-                                background: linear-gradient(135deg, #0f172a, #1e40af);
-                                color: white;
-                                padding: 25px 20px;
-                                text-align: center;
-                            ">
-                                <h3 style="margin:0; font-size: 1.3rem; font-weight: 800; letter-spacing: -0.5px;">🏅 파리 올림픽 메달 순위</h3>
-                                <p style="margin:8px 0 0; font-size: 0.85rem; opacity: 0.7;">실시간 데이터를 불러오고 있습니다</p>
-                            </div>
-                            
-                            <div style="padding: 10px 5px;">
+                        <div style="background:#1e40af; color:white; padding:25px; text-align:center;">
+                            <h3 style="margin:0; font-size:1.2rem;">🏅 실시간 메달 순위</h3>
+                        </div>
+                        <div style="padding:10px 0;">
                     `;
-
                     data.forEach((team, index) => {
-                        const isTop3 = index < 3;
                         html += `
-                            <div style="
-                                display: flex;
-                                align-items: center;
-                                padding: 18px 15px;
-                                border-bottom: ${index === data.length - 1 ? 'none' : '1px solid #f1f5f9'};
-                                transition: background 0.2s;
-                                -webkit-tap-highlight-color: rgba(30, 64, 175, 0.1);
-                            " onclick="">
-                                
-                                <span style="
-                                    width: 35px; 
-                                    font-weight: 900; 
-                                    color: ${isTop3 ? '#1e293b' : '#cbd5e1'};
-                                    font-size: 1.1rem;
-                                    text-align: center;
-                                ">${index + 1}</span>
-                                
-                                <div style="flex: 1; font-weight: 700; color: #1e293b; margin-left: 10px; font-size: 1.05rem;">
-                                    ${team.country}
-                                </div>
-                                
-                                <div style="display: flex; gap: 15px; text-align: center; padding-right: 5px;">
-                                    <div style="width: 35px;">
-                                        <div style="font-weight: 800; color: #fbbf24; font-size: 1.1rem;">${team.gold}</div>
-                                        <div style="font-size: 0.7rem; color: #94a3b8; font-weight: 600;">금</div>
-                                    </div>
-                                    <div style="width: 35px;">
-                                        <div style="font-weight: 800; color: #94a3b8; font-size: 1.1rem;">${team.silver}</div>
-                                        <div style="font-size: 0.7rem; color: #94a3b8; font-weight: 600;">은</div>
-                                    </div>
-                                    <div style="width: 35px;">
-                                        <div style="font-weight: 800; color: #d97706; font-size: 1.1rem;">${team.bronze}</div>
-                                        <div style="font-size: 0.7rem; color: #94a3b8; font-weight: 600;">동</div>
-                                    </div>
+                            <div style="display:flex; align-items:center; padding:15px 20px; border-bottom:1px solid #f1f5f9;">
+                                <span style="width:30px; font-weight:bold;">${index + 1}</span>
+                                <div style="flex:1; font-weight:600;">${team.country}</div>
+                                <div style="display:flex; gap:12px; font-weight:bold;">
+                                    <span style="color:#fbbf24;">${team.gold}</span>
+                                    <span style="color:#94a3b8;">${team.silver}</span>
+                                    <span style="color:#d97706;">${team.bronze}</span>
                                 </div>
                             </div>
                         `;
                     });
-
-                    html += `
-                            </div>
-                            <div style="
-                                background: #f8fafc;
-                                padding: 20px;
-                                text-align: center;
-                                font-size: 1rem;
-                                color: #2563eb;
-                                cursor: pointer;
-                                font-weight: 800;
-                                border-top: 1px solid #e2e8f0;
-                            " onclick="location.reload()">
-                                🔄 순위 새로고침
-                            </div>
-                        </div>
-                    `;
-
+                    html += `</div><div style="padding:15px; text-align:center; color:#1e40af; font-weight:bold;" onclick="location.reload()">🔄 새로고침</div>`;
                     container.innerHTML = html;
                 })
                 .catch(err => {
-                    container.innerHTML = "<div style='padding:50px; text-align:center;'>데이터를 불러오는 중입니다...</div>";
+                    container.innerHTML = "<p style='padding:20px;'>연결 오류</p>";
                 });
         })();
     </script>
