@@ -6,7 +6,6 @@ from fastapi.responses import FileResponse
 
 app = FastAPI()
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,6 +13,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+#new폴더에 있으므로 서버위치 경로를 설정함
+# 현재 파일(api_server.py)의 위치를 기준으로 절대 경로를 설정합니다.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+static_path = os.path.join(BASE_DIR, "static")
+
+
+# 2. 테스트 경로 (반드시 mount보다 위에 작성!)
+@app.get("/test-medal")
+async def test_medal():
+    medal_file = os.path.join(static_path, "medal.html")
+    if os.path.exists(medal_file):
+        return FileResponse(medal_file)
+    
+    # 파일이 없을 경우 디버깅 정보 출력
+    files_in_static = os.listdir(static_path) if os.path.exists(static_path) else "static 폴더 없음"
+    return {
+        "status": "error",
+        "message": "medal.html을 찾을 수 없습니다.",
+        "checked_path": medal_file,
+        "files_found": files_in_static,
+        "current_dir": os.getcwd()
+    }
 
 medals = [
     {"country": "USA", "gold": 39, "silver": 41, "bronze": 33},
@@ -33,12 +55,13 @@ def get_medal():
     return medals
 
 
-#new폴더에 있으므로 서버위치 경로를 설정함
-# 현재 파일(api_server.py)의 위치를 기준으로 절대 경로를 설정합니다.
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-static_path = os.path.join(BASE_DIR, "static")
-app.mount("/static", StaticFiles(directory=static_path), name="static")
+#app.mount("/static", StaticFiles(directory=static_path), name="static")  지금 수정 do(2026-02-06)
 #app.mount("/", StaticFiles(directory=static_path, html=True), name="root")
+
+# 3. 정적 파일 마운트 (가장 마지막에)
+if os.path.exists(static_path):
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
+
 
 @app.get("/")
 async def read_index():
