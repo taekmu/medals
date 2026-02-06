@@ -49,3 +49,14 @@ async def read_index():
 print(f"현재 BASE_DIR: {BASE_DIR}", flush=True)
 print(f"설정된 static_path: {static_path}", flush=True)
 print(f"폴더 존재 여부: {os.path.exists(static_path)}", flush=True)
+
+# api_server.py에 추가
+@app.get("/test-medal")
+async def serve_medal_file():
+    target = os.path.join(static_path, "medal.html")
+    if os.path.exists(target):
+        return FileResponse(target)
+    else:
+        # 파일이 실제로 어디 있는지 리스트를 출력해봅니다 (디버깅용)
+        files = os.listdir(static_path)
+        return {"error": "파일 없음", "path": target, "folder_contents": files}
