@@ -1,7 +1,7 @@
 (function () {
   const container = document.currentScript.parentElement;
 
-  fetch("https://medalboard.onrender.com/medals")
+  fetch("/medals")
     .then(res => res.json())
     .then(data => {
       // 모바일 최적화 스타일 정의
