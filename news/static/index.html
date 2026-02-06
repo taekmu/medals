@@ -3,70 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#1e40af">
-
     <title>실시간 메달보드</title>
     <style>
-        /* CSS 영역: 여기에 webkit 설정을 넣어야 에러가 안 납니다 */
+        /* [중요] CSS 에러 방지를 위해 스타일은 여기에 작성 */
         body { 
             margin: 0; 
-            padding: 0;
             background-color: #f1f5f9; 
-            font-family: 'Pretendard', sans-serif;
-            /* 앱처럼 텍스트 드래그 방지 (에러 수정됨) */
-            -webkit-user-select: none; 
+            -webkit-user-select: none; /* 에러 없이 정상 작동 */
             user-select: none; 
-        }
-        #app-container { padding: 20px 15px; width: 100%; box-sizing: border-box; }
-        .board-card {
-            background: #ffffff;
-            border-radius: 24px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            overflow: hidden;
         }
     </style>
 </head>
 <body>
-    <div id="app-container">
-        <div id="medal-board" class="board-card">데이터를 불러오는 중...</div>
+    <div id="medal-widget-container">
+        <script src="https://medalboard.onrender.com/static/widget.js"></script>
     </div>
-
-    <script>
-        // 자바스크립트 영역: 여기에 CSS를 넣으면 에러가 납니다.
-        (function () {
-            const container = document.getElementById('medal-board');
-            fetch("https://medalboard.onrender.com/medals")
-                .then(res => res.json())
-                .then(data => {
-                    let html = `
-                        <div style="background:#1e40af; color:white; padding:25px; text-align:center;">
-                            <h3 style="margin:0; font-size:1.2rem;">🏅 실시간 메달 순위</h3>
-                        </div>
-                        <div style="padding:10px 0;">
-                    `;
-                    data.forEach((team, index) => {
-                        html += `
-                            <div style="display:flex; align-items:center; padding:15px 20px; border-bottom:1px solid #f1f5f9;">
-                                <span style="width:30px; font-weight:bold;">${index + 1}</span>
-                                <div style="flex:1; font-weight:600;">${team.country}</div>
-                                <div style="display:flex; gap:12px; font-weight:bold;">
-                                    <span style="color:#fbbf24;">${team.gold}</span>
-                                    <span style="color:#94a3b8;">${team.silver}</span>
-                                    <span style="color:#d97706;">${team.bronze}</span>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    html += `</div><div style="padding:15px; text-align:center; color:#1e40af; font-weight:bold;" onclick="location.reload()">🔄 새로고침</div>`;
-                    container.innerHTML = html;
-                })
-                .catch(err => {
-                    container.innerHTML = "<p style='padding:20px;'>연결 오류</p>";
-                });
-        })();
-    </script>
 </body>
 </html>
