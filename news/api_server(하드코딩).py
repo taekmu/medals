@@ -58,7 +58,7 @@ async def medals():
     files_in_static = os.listdir(static_path) if os.path.exists(static_path) else "static 폴더 없음"
     return {
         "status": "error",
-        "message": "index.html을 찾을 수 없습니다.",
+        "message": "medal.html을 찾을 수 없습니다.",
         "checked_path": medal_file,
         "files_found": files_in_static,
         "current_dir": os.getcwd()
