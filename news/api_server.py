@@ -33,11 +33,8 @@ def _clean_cell(cell):
         s.decompose()
     text = cell.get_text(separator=' ', strip=True)
     text = unicodedata.normalize('NFKC', text)
-    # Remove citation brackets and parentheses
     text = re.sub(r'\[\d+\]|\(\d+\)', '', text)
-    # Remove special characters: dagger, double dagger, asterisk, NBSP
     text = re.sub(r'[\u2020\u2021\u00A0\*]', '', text)
-    # Normalize whitespace
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
@@ -49,9 +46,38 @@ def _find_medal_table(soup):
             return t
     return None
 
+def _assign_ranks(medal_data):
+    """메달 수가 같으면 같은 순위 부여"""
+    ranked = []
+    for i, item in enumerate(medal_data):
+        gold = int(item["gold"])
+        silver = int(item["silver"])
+        bronze = int(item["bronze"])
+        total = gold + silver + bronze
+        
+        # 같은 순위 찾기 (이전 항목과 메달 수 비교)
+        if i == 0:
+            rank = 1
+        else:
+            prev_gold = int(medal_data[i-1]["gold"])
+            prev_silver = int(medal_data[i-1]["silver"])
+            prev_bronze = int(medal_data[i-1]["bronze"])
+            prev_total = prev_gold + prev_silver + prev_bronze
+            
+            # Gold > Silver > Bronze 순서로 비교
+            if (gold == prev_gold and silver == prev_silver and bronze == prev_bronze):
+                rank = ranked[i-1]["rank"]  # 같은 순위
+            else:
+                rank = i + 1  # 다른 순위
+        
+        item["rank"] = rank
+        ranked.append(item)
+    
+    return ranked
+
 def fetch_medals_from_web():
     try:
-        url = "https://en.wikipedia.org/wiki/2024_Summer_Olympics_medal_table"
+        url = "https://en.wikipedia.org/wiki/2026_Winter_Olympics_medal_table"
         headers = {"User-Agent": "Mozilla/5.0"}
         resp = requests.get(url, headers=headers, timeout=10)
         resp.encoding = 'utf-8'
@@ -88,7 +114,13 @@ def fetch_medals_from_web():
             )
             if len(cols) <= max_idx:
                 continue
+            
             country = _clean_cell(cols[country_idx]) if country_idx is not None else _clean_cell(cols[0])
+            
+            # 숫자만 있거나 빈 국가명 스킵
+            if not country or country.isdigit() or country.strip() == '':
+                continue
+            
             gold = _clean_cell(cols[gold_idx]) if gold_idx is not None else "0"
             silver = _clean_cell(cols[silver_idx]) if silver_idx is not None else "0"
             bronze = _clean_cell(cols[bronze_idx]) if bronze_idx is not None else "0"
@@ -102,6 +134,9 @@ def fetch_medals_from_web():
             if len(medal_data) >= 10:
                 break
 
+        # 순위 부여
+        medal_data = _assign_ranks(medal_data)
+        
         logger.info("Fetched %d rows from web", len(medal_data))
         return medal_data
 
@@ -128,6 +163,10 @@ def fetch_medals_from_local():
                 silver = _clean_cell(cols[2])
                 bronze = _clean_cell(cols[3])
                 medal_data.append({"country": country, "gold": gold, "silver": silver, "bronze": bronze})
+        
+        # 순위 부여
+        medal_data = _assign_ranks(medal_data)
+        
         logger.info("Loaded %d rows from local file", len(medal_data))
         return medal_data
     except Exception:

@@ -43,3 +43,12 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 git add .
 git commit -m "add widget"
 git push
+
+
+(.venv) D:\realtime-api2\news>uvicorn api_server:app --reload --port 8000
+INFO:     Will watch for changes in these directories: ['D:\\realtime-api2\\news']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [10572] using StatReload
+INFO:     Started server process [3456]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
