@@ -3,11 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
+import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
+from starlette.concurrency import run_in_threadpool
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,70 +23,133 @@ app.add_middleware(
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 static_path = os.path.join(BASE_DIR, "static")
 
-medal_cache = {
-    "data": [],
-    "last_update": None
-}
+medal_cache = {"data": [], "last_update": None}
+CACHE_SECONDS = 120  # 캐시 기간 (초)
+
+def _clean_cell(cell):
+    for s in cell.find_all(['sup', 'span', 'small']):
+        s.decompose()
+    return cell.get_text(strip=True)
+
+def _find_medal_table(soup):
+    tables = soup.find_all("table")
+    for t in tables:
+        headers = [th.get_text(strip=True).lower() for th in t.find_all("th")]
+        if any("gold" in h for h in headers) and any("silver" in h for h in headers) and any("bronze" in h for h in headers):
+            return t
+    return None
+
+def fetch_medals_from_web():
+    """웹에서 메달 테이블 자동 탐지  파싱 (동기 함수)"""
+    try:
+        url = "https://en.wikipedia.org/wiki/2024_Summer_Olympics_medal_table"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.encoding = 'utf-8'
+        soup = BeautifulSoup(resp.content, "html.parser")
+
+        table = _find_medal_table(soup)
+        if not table:
+            logger.warning("No medal table found on page")
+            return []
+
+        ths = [th.get_text(strip=True).lower() for th in table.find_all("th")]
+        # 인덱스 탐지
+        def find_idx(preds):
+            for i, h in enumerate(ths):
+                for p in preds:
+                    if p in h:
+                        return i
+            return None
+
+        country_idx = find_idx(["nation", "country", "team", "noc", "nation/territory"])
+        gold_idx = find_idx(["gold"])
+        silver_idx = find_idx(["silver"])
+        bronze_idx = find_idx(["bronze"])
+
+        # 헤더에 rank(순위)가 있고 국가가 두번째 컬럼이면 fallback
+        if country_idx is None and len(ths) >= 2:
+            country_idx = 1
+
+        rows = table.find_all("tr")[1:]
+        medal_data = []
+        for row in rows:
+            cols = row.find_all(["td", "th"])
+            # 안전한 인덱스 확인
+            max_idx = max(
+                [i for i in (country_idx, gold_idx, silver_idx, bronze_idx) if i is not None],
+                default=-1
+            )
+            if len(cols) <= max_idx:
+                continue
+            # 추출
+            country = _clean_cell(cols[country_idx]) if country_idx is not None else _clean_cell(cols[0])
+            gold = _clean_cell(cols[gold_idx]) if gold_idx is not None else "0"
+            silver = _clean_cell(cols[silver_idx]) if silver_idx is not None else "0"
+            bronze = _clean_cell(cols[bronze_idx]) if bronze_idx is not None else "0"
+
+            medal_data.append({
+                "country": country,
+                "gold": gold,
+                "silver": silver,
+                "bronze": bronze
+            })
+            if len(medal_data) >= 10:
+                break
+
+        logger.info("Fetched %d rows from web", len(medal_data))
+        return medal_data
+
+    except Exception as e:
+        logger.exception("Error fetching medals from web")
+        return []
 
 def fetch_medals_from_local():
-    """medal.html에서 메달 데이터 읽기"""
+    """local static/medal.html에서 읽기"""
     try:
         medal_file = os.path.join(static_path, "medal.html")
-        medal_data = []
-        
         if not os.path.exists(medal_file):
-            print(f"Error: {medal_file} not found")
             return []
-        
         with open(medal_file, "r", encoding="utf-8") as f:
             soup = BeautifulSoup(f.read(), "html.parser")
-        
-        # class="country-row" 인 모든 tr 찾기
         rows = soup.find_all("tr", {"class": "country-row"})
-        
-        for row in rows[:10]:  # 상위 10개
+        if not rows:
+            rows = soup.find_all("tr")
+        medal_data = []
+        for row in rows[:10]:
             cols = row.find_all("td")
             if len(cols) >= 4:
-                country = cols[0].get_text(strip=True)
-                gold = cols[1].get_text(strip=True)
-                silver = cols[2].get_text(strip=True)
-                bronze = cols[3].get_text(strip=True)
-                
-                medal_data.append({
-                    "country": country,
-                    "gold": gold,
-                    "silver": silver,
-                    "bronze": bronze
-                })
-        
-        print(f"✅ Loaded {len(medal_data)} countries from medal.html")
+                country = _clean_cell(cols[0])
+                gold = _clean_cell(cols[1])
+                silver = _clean_cell(cols[2])
+                bronze = _clean_cell(cols[3])
+                medal_data.append({"country": country, "gold": gold, "silver": silver, "bronze": bronze})
+        logger.info("Loaded %d rows from local file", len(medal_data))
         return medal_data
-    
-    except Exception as e:
-        print(f"❌ Error reading medal.html: {e}")
+    except Exception:
+        logger.exception("Error reading local medal.html")
         return []
 
 @app.get("/medals")
 async def get_medals():
-    """메달 데이터 반환 (캐싱 포함)"""
+    """실시간 우선, 없으면 로컬 폴백 — 캐시 적용"""
     global medal_cache
-    now = datetime.now()
-    
-    # 캐시가 유효하면 반환 (5분 이내)
-    if (medal_cache["last_update"] is not None and 
-        now - medal_cache["last_update"] < timedelta(minutes=5) and
-        len(medal_cache["data"]) > 0):
+    now = datetime.utcnow()
+    last = medal_cache["last_update"]
+    if last and (now - last).total_seconds() < CACHE_SECONDS and medal_cache["data"]:
         return medal_cache["data"]
-    
-    # 새로운 데이터 읽기
-    medal_cache["data"] = fetch_medals_from_local()
+
+    # 웹 fetch를 쓰레드풀로 오프로드
+    data = await run_in_threadpool(fetch_medals_from_web)
+    if not data:
+        data = await run_in_threadpool(fetch_medals_from_local)
+
+    medal_cache["data"] = data
     medal_cache["last_update"] = now
-    
-    return medal_cache["data"]
+    return data
 
 @app.get("/")
 async def read_index():
-    """인덱스 페이지"""
     index_file = os.path.join(static_path, "index.html")
     if os.path.exists(index_file):
         return FileResponse(index_file)
@@ -89,16 +157,14 @@ async def read_index():
 
 @app.get("/health")
 async def health_check():
-    """서버 상태 확인"""
     return {
         "status": "ok",
         "medals_cached": len(medal_cache["data"]) > 0,
         "last_update": medal_cache["last_update"].isoformat() if medal_cache["last_update"] else None
     }
 
-# 정적 파일 마운트
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import uvicorn
     uvicorn.run("api_server:app", host="0.0.0.0", port=8000)
