@@ -1,20 +1,23 @@
-﻿from fastapi import FastAPI
+﻿import os
+import re
+import unicodedata
+import requests
+import logging
+from datetime import datetime
+from bs4 import BeautifulSoup
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import os
-import requests
-from bs4 import BeautifulSoup
-from datetime import datetime
 from starlette.concurrency import run_in_threadpool
-import logging
-import re
-import unicodedata
 
+# 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+app = FastAPI(title="2026 Winter Olympics Medal API")
+
+# CORS 설정: 프론트엔드에서 API 접근이 가능하도록 허용
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,77 +25,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 경로 설정: /static 폴더 경로 (슬래시 주의!)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 static_path = os.path.join(BASE_DIR, "static")
 
-medal_cache = {"data": [], "last_update": None}
-CACHE_SECONDS = 120
-
-def _clean_cell(cell):
-    for s in cell.find_all(['sup', 'span', 'small']):
-        s.decompose()
-    text = cell.get_text(separator=' ', strip=True)
+# 텍스트 정제 함수
+def _clean_text(text):
+    if not text: return ""
     text = unicodedata.normalize('NFKC', text)
     text = re.sub(r'\[\d+\]|\(\d+\)', '', text)
     text = re.sub(r'[\u2020\u2021\u00A0\*]', '', text)
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
+    return text.strip()
 
-def _find_medal_table(soup):
-    tables = soup.find_all("table")
-    for t in tables:
-        headers = [th.get_text(strip=True).lower() for th in t.find_all("th")]
-        if any("gold" in h for h in headers) and any("silver" in h for h in headers) and any("bronze" in h for h in headers):
-            return t
-    return None
-
-def _extract_country_from_row(row, country_idx):
-    try:
-        cells = row.find_all(["td", "th"])
-        if country_idx is not None and country_idx < len(cells):
-            cell = cells[country_idx]
-            a = cell.find('a', href=True)
-            if a and a.get_text(strip=True):
-                return _clean_cell(a)
-            fi = cell.find('span', class_='flagicon')
-            if fi:
-                nxt = fi.next_sibling
-                if nxt and isinstance(nxt, str) and nxt.strip():
-                    return nxt.strip()
-                a2 = cell.find('a')
-                if a2 and a2.get_text(strip=True):
-                    return _clean_cell(a2)
-            txt = _clean_cell(cell)
-            if txt and not txt.isdigit():
-                return txt
-    except Exception:
-        pass
-    a = row.find('a', href=True)
-    if a and a.get_text(strip=True):
-        return _clean_cell(a)
-    txt = _clean_cell(row)
-    return txt if txt and not txt.isdigit() else ""
-
-def _assign_ranks(medal_data):
-    ranked = []
-    for i, item in enumerate(medal_data):
-        g = int(item.get("gold", 0))
-        s = int(item.get("silver", 0))
-        b = int(item.get("bronze", 0))
-        if i == 0:
-            rank = 1
-        else:
-            pg = int(medal_data[i-1]["gold"])
-            ps = int(medal_data[i-1]["silver"])
-            pb = int(medal_data[i-1]["bronze"])
-            if g == pg and s == ps and b == pb:
-                rank = ranked[i-1]["rank"]
-            else:
-                rank = i + 1
-        item["rank"] = rank
-        ranked.append(item)
-    return ranked
-
+# 위키피디아에서 메달 데이터 크롤링
 def fetch_medals_from_web():
     try:
         url = "https://en.wikipedia.org/wiki/2026_Winter_Olympics_medal_table"
@@ -100,126 +45,108 @@ def fetch_medals_from_web():
         resp = requests.get(url, headers=headers, timeout=10)
         resp.encoding = 'utf-8'
         soup = BeautifulSoup(resp.content, "html.parser")
-
-        table = _find_medal_table(soup)
-        if not table:
-            logger.warning("No medal table found on page")
+        
+        # 'wikitable' 클래스를 가진 테이블 찾기
+        table = soup.find("table", {"class": "wikitable"})
+        if not table: 
+            logger.warning("Medal table not found.")
             return []
 
-        ths = [th.get_text(strip=True).lower() for th in table.find_all("th")]
-        def find_idx(preds):
-            for i, h in enumerate(ths):
-                for p in preds:
-                    if p in h: return i
-            return None
-
-        country_idx = find_idx(["nation", "country", "team", "noc"])
-        gold_idx = find_idx(["gold"])
-        silver_idx = find_idx(["silver"])
-        bronze_idx = find_idx(["bronze"])
-
         rows = table.find_all("tr")[1:]
-        temp = []
+        temp_list = []
+
         for row in rows:
             cols = row.find_all(["td", "th"])
-            max_idx = max([i for i in (gold_idx, silver_idx, bronze_idx) if i is not None], default=-1)
-            if len(cols) <= max_idx: continue
+            if len(cols) < 4: continue
 
-            country = _extract_country_from_row(row, country_idx)
+            # 국가 이름 추출 (첫 번째 <a> 태그 기준)
+            country_name = ""
+            for col in cols:
+                a_tag = col.find("a")
+                if a_tag and a_tag.get_text(strip=True):
+                    name = _clean_text(a_tag.get_text(strip=True))
+                    # 'Total' 행이나 숫자로만 된 행 제외
+                    if "total" not in name.lower() and not name.isdigit():
+                        country_name = name
+                        break
             
-            # [수정] 합계 행 제외 로직 추가
-            if not country or "total" in country.lower():
-                continue
+            if not country_name: continue
 
-            def safe_int_cell(idx):
-                try:
-                    text = _clean_cell(cols[idx]) if idx is not None and idx < len(cols) else "0"
-                    return int(re.sub(r'[^\d]', '', text) or 0)
-                except: return 0
+            # 숫자 데이터(금, 은, 동) 추출
+            nums = []
+            for col in cols:
+                txt = re.sub(r'[^\d]', '', col.get_text(strip=True))
+                if txt.isdigit():
+                    nums.append(int(txt))
+            
+            # [순위, 금, 은, 동, 합계] 구조 대응
+            if len(nums) >= 4:
+                # 첫 번째 숫자가 순위인 경우 인덱스 1부터, 아니면 0부터 시작
+                idx = 1 if len(nums) >= 5 else 0
+                temp_list.append({
+                    "country": country_name,
+                    "gold": nums[idx],
+                    "silver": nums[idx+1],
+                    "bronze": nums[idx+2]
+                })
 
-            temp.append({
-                "country": country,
-                "gold": safe_int_cell(gold_idx),
-                "silver": safe_int_cell(silver_idx),
-                "bronze": safe_int_cell(bronze_idx)
-            })
-
-        temp_sorted = sorted(temp, key=lambda x: (-x["gold"], -x["silver"], -x["bronze"]))
-        top10 = temp_sorted[:10]
-        ranked = _assign_ranks(top10)
-
-        for it in ranked:
-            it["gold"], it["silver"], it["bronze"] = str(it["gold"]), str(it["silver"]), str(it["bronze"])
-
-        logger.info("Fetched %d rows from web", len(ranked))
-        return ranked
-    except Exception:
-        logger.exception("Error fetching medals from web")
-        return []
-
-def fetch_medals_from_local():
-    try:
-        medal_file = os.path.join(static_path, "medal.html")
-        if not os.path.exists(medal_file): return []
-        with open(medal_file, "r", encoding="utf-8") as f:
-            soup = BeautifulSoup(f.read(), "html.parser")
+        # 1. 메달 성적순 정렬 (금 > 은 > 동)
+        temp_list.sort(key=lambda x: (-x["gold"], -x["silver"], -x["bronze"]))
         
-        rows = soup.find_all("tr")
-        medal_data = []
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) >= 4:
-                country = _clean_cell(cols[0])
-                # [수정] 합계 행 제외 로직 추가
-                if "total" in country.lower(): continue
-                
-                gold = int(re.sub(r'[^\d]', '', _clean_cell(cols[1]) or "0"))
-                silver = int(re.sub(r'[^\d]', '', _clean_cell(cols[2]) or "0"))
-                bronze = int(re.sub(r'[^\d]', '', _clean_cell(cols[3]) or "0"))
-                medal_data.append({"country": country, "gold": gold, "silver": silver, "bronze": bronze})
-
-        temp_sorted = sorted(medal_data, key=lambda x: (-x["gold"], -x["silver"], -x["bronze"]))
-        top10 = temp_sorted[:10]
-        ranked = _assign_ranks(top10)
-        for it in ranked:
-            it["gold"], it["silver"], it["bronze"] = str(it["gold"]), str(it["silver"]), str(it["bronze"])
+        # 2. 공동 순위 로직 적용 및 상위 10개 추출
+        ranked = []
+        for i, item in enumerate(temp_list[:10]):
+            if i > 0:
+                prev = ranked[i-1]
+                if (item["gold"] == int(prev["gold"]) and 
+                    item["silver"] == int(prev["silver"]) and 
+                    item["bronze"] == int(prev["bronze"])):
+                    item["rank"] = prev["rank"]
+                else:
+                    item["rank"] = i + 1
+            else:
+                item["rank"] = 1
+            
+            # JSON 반환을 위해 숫자를 문자열로 변환 (기존 코드 유지)
+            item["gold"] = str(item["gold"])
+            item["silver"] = str(item["silver"])
+            item["bronze"] = str(item["bronze"])
+            ranked.append(item)
+            
         return ranked
-    except Exception:
-        logger.exception("Error reading local medal.html")
+
+    except Exception as e:
+        logger.error(f"Error fetching medals: {e}")
         return []
+
+# --- API Endpoints ---
 
 @app.get("/medals")
 async def get_medals():
-    global medal_cache
-    now = datetime.now()
-    last = medal_cache["last_update"]
-    if last and (now - last).total_seconds() < CACHE_SECONDS and medal_cache["data"]:
-        return medal_cache["data"]
-
-    data = await run_in_threadpool(fetch_medals_from_web)
-    if not data:
-        data = await run_in_threadpool(fetch_medals_from_local)
-
-    medal_cache["data"] = data
-    medal_cache["last_update"] = now
-    return data
-
-@app.get("/")
-async def read_index():
-    index_file = os.path.join(static_path, "index.html")
-    if os.path.exists(index_file): return FileResponse(index_file)
-    return {"error": "index.html not found"}
+    """실시간 메달 순위 데이터 반환"""
+    return await run_in_threadpool(fetch_medals_from_web)
 
 @app.get("/health")
 async def health_check():
+    """서버 상태 확인용 엔드포인트"""
     return {
         "status": "ok",
-        "medals_cached": len(medal_cache["data"]) > 0,
-        "last_update": medal_cache["last_update"].isoformat() if medal_cache["last_update"] else None
+        "timestamp": datetime.now().isoformat(),
+        "info": "2026 Winter Olympics Medal Server"
     }
 
+@app.get("/")
+async def read_index():
+    """메인 페이지(index.html) 반환"""
+    index_path = os.path.join(static_path, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"error": "index.html not found in static folder"}
+
+# 정적 파일 서빙 (CSS, JS, 이미지 등)
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run("api_server:app", host="0.0.0.0", port=8000)
+    # 외부 접속 허용을 위해 0.0.0.0으로 실행
+    uvicorn.run(app, host="0.0.0.0", port=8000)
