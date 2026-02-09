@@ -2,22 +2,22 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="mobile-web-app-capable" content="yes">
-    <title>실시간 메달보드</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026 동계 올림픽 실시간 순위</title>
     <style>
-        /* [중요] CSS 에러 방지를 위해 스타일은 여기에 작성 */
-        body { 
-            margin: 0; 
-            background-color: #f1f5f9; 
-            -webkit-user-select: none; /* 에러 없이 정상 작동 */
-            user-select: none; 
-        }
+        body { background-color: #f1f5f9; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
     </style>
 </head>
 <body>
-    <div id="medal-widget-container">
-        <script src="https://medalboard.onrender.com/static/widget.js?update=1"></script>
+
+    <div style="width: 100%; padding: 20px;">
+        <script>
+            // 브라우저 캐시를 무시하기 위해 파일명 뒤에 랜덤 숫자를 붙여서 불러옵니다.
+            const script = document.createElement('script');
+            script.src = "/static/widget.js?v=" + new Date().getTime();
+            document.body.appendChild(script);
+        </script>
     </div>
+
 </body>
 </html>
