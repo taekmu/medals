@@ -8,6 +8,8 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from starlette.concurrency import run_in_threadpool
 import logging
+import re
+import unicodedata
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,12 +26,20 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 static_path = os.path.join(BASE_DIR, "static")
 
 medal_cache = {"data": [], "last_update": None}
-CACHE_SECONDS = 120  # 캐시 기간 (초)
+CACHE_SECONDS = 120
 
 def _clean_cell(cell):
     for s in cell.find_all(['sup', 'span', 'small']):
         s.decompose()
-    return cell.get_text(strip=True)
+    text = cell.get_text(separator=' ', strip=True)
+    text = unicodedata.normalize('NFKC', text)
+    # Remove citation brackets and parentheses
+    text = re.sub(r'\[\d+\]|\(\d+\)', '', text)
+    # Remove special characters: dagger, double dagger, asterisk, NBSP
+    text = re.sub(r'[\u2020\u2021\u00A0\*]', '', text)
+    # Normalize whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 def _find_medal_table(soup):
     tables = soup.find_all("table")
@@ -40,7 +50,6 @@ def _find_medal_table(soup):
     return None
 
 def fetch_medals_from_web():
-    """웹에서 메달 테이블 자동 탐지  파싱 (동기 함수)"""
     try:
         url = "https://en.wikipedia.org/wiki/2024_Summer_Olympics_medal_table"
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -54,7 +63,6 @@ def fetch_medals_from_web():
             return []
 
         ths = [th.get_text(strip=True).lower() for th in table.find_all("th")]
-        # 인덱스 탐지
         def find_idx(preds):
             for i, h in enumerate(ths):
                 for p in preds:
@@ -67,7 +75,6 @@ def fetch_medals_from_web():
         silver_idx = find_idx(["silver"])
         bronze_idx = find_idx(["bronze"])
 
-        # 헤더에 rank(순위)가 있고 국가가 두번째 컬럼이면 fallback
         if country_idx is None and len(ths) >= 2:
             country_idx = 1
 
@@ -75,14 +82,12 @@ def fetch_medals_from_web():
         medal_data = []
         for row in rows:
             cols = row.find_all(["td", "th"])
-            # 안전한 인덱스 확인
             max_idx = max(
                 [i for i in (country_idx, gold_idx, silver_idx, bronze_idx) if i is not None],
                 default=-1
             )
             if len(cols) <= max_idx:
                 continue
-            # 추출
             country = _clean_cell(cols[country_idx]) if country_idx is not None else _clean_cell(cols[0])
             gold = _clean_cell(cols[gold_idx]) if gold_idx is not None else "0"
             silver = _clean_cell(cols[silver_idx]) if silver_idx is not None else "0"
@@ -105,7 +110,6 @@ def fetch_medals_from_web():
         return []
 
 def fetch_medals_from_local():
-    """local static/medal.html에서 읽기"""
     try:
         medal_file = os.path.join(static_path, "medal.html")
         if not os.path.exists(medal_file):
@@ -132,14 +136,12 @@ def fetch_medals_from_local():
 
 @app.get("/medals")
 async def get_medals():
-    """실시간 우선, 없으면 로컬 폴백 — 캐시 적용"""
     global medal_cache
     now = datetime.utcnow()
     last = medal_cache["last_update"]
     if last and (now - last).total_seconds() < CACHE_SECONDS and medal_cache["data"]:
         return medal_cache["data"]
 
-    # 웹 fetch를 쓰레드풀로 오프로드
     data = await run_in_threadpool(fetch_medals_from_web)
     if not data:
         data = await run_in_threadpool(fetch_medals_from_local)
