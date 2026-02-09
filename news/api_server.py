@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 import os
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime
 from starlette.concurrency import run_in_threadpool
 import logging
 import re
@@ -46,33 +46,51 @@ def _find_medal_table(soup):
             return t
     return None
 
+def _extract_country_from_row(row, country_idx):
+    try:
+        cells = row.find_all(["td", "th"])
+        if country_idx is not None and country_idx < len(cells):
+            cell = cells[country_idx]
+            a = cell.find('a', href=True)
+            if a and a.get_text(strip=True):
+                return _clean_cell(a)
+            fi = cell.find('span', class_='flagicon')
+            if fi:
+                nxt = fi.next_sibling
+                if nxt and isinstance(nxt, str) and nxt.strip():
+                    return nxt.strip()
+                a2 = cell.find('a')
+                if a2 and a2.get_text(strip=True):
+                    return _clean_cell(a2)
+            txt = _clean_cell(cell)
+            if txt and not txt.isdigit():
+                return txt
+    except Exception:
+        pass
+    a = row.find('a', href=True)
+    if a and a.get_text(strip=True):
+        return _clean_cell(a)
+    txt = _clean_cell(row)
+    return txt if txt and not txt.isdigit() else ""
+
 def _assign_ranks(medal_data):
-    """메달 수가 같으면 같은 순위 부여"""
     ranked = []
     for i, item in enumerate(medal_data):
-        gold = int(item["gold"])
-        silver = int(item["silver"])
-        bronze = int(item["bronze"])
-        total = gold + silver + bronze
-        
-        # 같은 순위 찾기 (이전 항목과 메달 수 비교)
+        g = int(item.get("gold", 0))
+        s = int(item.get("silver", 0))
+        b = int(item.get("bronze", 0))
         if i == 0:
             rank = 1
         else:
-            prev_gold = int(medal_data[i-1]["gold"])
-            prev_silver = int(medal_data[i-1]["silver"])
-            prev_bronze = int(medal_data[i-1]["bronze"])
-            prev_total = prev_gold + prev_silver + prev_bronze
-            
-            # Gold > Silver > Bronze 순서로 비교
-            if (gold == prev_gold and silver == prev_silver and bronze == prev_bronze):
-                rank = ranked[i-1]["rank"]  # 같은 순위
+            pg = int(medal_data[i-1]["gold"])
+            ps = int(medal_data[i-1]["silver"])
+            pb = int(medal_data[i-1]["bronze"])
+            if g == pg and s == ps and b == pb:
+                rank = ranked[i-1]["rank"]
             else:
-                rank = i + 1  # 다른 순위
-        
+                rank = i + 1
         item["rank"] = rank
         ranked.append(item)
-    
     return ranked
 
 def fetch_medals_from_web():
@@ -92,83 +110,80 @@ def fetch_medals_from_web():
         def find_idx(preds):
             for i, h in enumerate(ths):
                 for p in preds:
-                    if p in h:
-                        return i
+                    if p in h: return i
             return None
 
-        country_idx = find_idx(["nation", "country", "team", "noc", "nation/territory"])
+        country_idx = find_idx(["nation", "country", "team", "noc"])
         gold_idx = find_idx(["gold"])
         silver_idx = find_idx(["silver"])
         bronze_idx = find_idx(["bronze"])
 
-        if country_idx is None and len(ths) >= 2:
-            country_idx = 1
-
         rows = table.find_all("tr")[1:]
-        medal_data = []
+        temp = []
         for row in rows:
             cols = row.find_all(["td", "th"])
-            max_idx = max(
-                [i for i in (country_idx, gold_idx, silver_idx, bronze_idx) if i is not None],
-                default=-1
-            )
-            if len(cols) <= max_idx:
-                continue
-            
-            country = _clean_cell(cols[country_idx]) if country_idx is not None else _clean_cell(cols[0])
-            
-            # 숫자만 있거나 빈 국가명 스킵
-            if not country or country.isdigit() or country.strip() == '':
-                continue
-            
-            gold = _clean_cell(cols[gold_idx]) if gold_idx is not None else "0"
-            silver = _clean_cell(cols[silver_idx]) if silver_idx is not None else "0"
-            bronze = _clean_cell(cols[bronze_idx]) if bronze_idx is not None else "0"
+            max_idx = max([i for i in (gold_idx, silver_idx, bronze_idx) if i is not None], default=-1)
+            if len(cols) <= max_idx: continue
 
-            medal_data.append({
+            country = _extract_country_from_row(row, country_idx)
+            
+            # [수정] 합계 행 제외 로직 추가
+            if not country or "total" in country.lower():
+                continue
+
+            def safe_int_cell(idx):
+                try:
+                    text = _clean_cell(cols[idx]) if idx is not None and idx < len(cols) else "0"
+                    return int(re.sub(r'[^\d]', '', text) or 0)
+                except: return 0
+
+            temp.append({
                 "country": country,
-                "gold": gold,
-                "silver": silver,
-                "bronze": bronze
+                "gold": safe_int_cell(gold_idx),
+                "silver": safe_int_cell(silver_idx),
+                "bronze": safe_int_cell(bronze_idx)
             })
-            if len(medal_data) >= 10:
-                break
 
-        # 순위 부여
-        medal_data = _assign_ranks(medal_data)
-        
-        logger.info("Fetched %d rows from web", len(medal_data))
-        return medal_data
+        temp_sorted = sorted(temp, key=lambda x: (-x["gold"], -x["silver"], -x["bronze"]))
+        top10 = temp_sorted[:10]
+        ranked = _assign_ranks(top10)
 
-    except Exception as e:
+        for it in ranked:
+            it["gold"], it["silver"], it["bronze"] = str(it["gold"]), str(it["silver"]), str(it["bronze"])
+
+        logger.info("Fetched %d rows from web", len(ranked))
+        return ranked
+    except Exception:
         logger.exception("Error fetching medals from web")
         return []
 
 def fetch_medals_from_local():
     try:
         medal_file = os.path.join(static_path, "medal.html")
-        if not os.path.exists(medal_file):
-            return []
+        if not os.path.exists(medal_file): return []
         with open(medal_file, "r", encoding="utf-8") as f:
             soup = BeautifulSoup(f.read(), "html.parser")
-        rows = soup.find_all("tr", {"class": "country-row"})
-        if not rows:
-            rows = soup.find_all("tr")
+        
+        rows = soup.find_all("tr")
         medal_data = []
-        for row in rows[:10]:
+        for row in rows:
             cols = row.find_all("td")
             if len(cols) >= 4:
                 country = _clean_cell(cols[0])
-                gold = _clean_cell(cols[1])
-                silver = _clean_cell(cols[2])
-                bronze = _clean_cell(cols[3])
+                # [수정] 합계 행 제외 로직 추가
+                if "total" in country.lower(): continue
+                
+                gold = int(re.sub(r'[^\d]', '', _clean_cell(cols[1]) or "0"))
+                silver = int(re.sub(r'[^\d]', '', _clean_cell(cols[2]) or "0"))
+                bronze = int(re.sub(r'[^\d]', '', _clean_cell(cols[3]) or "0"))
                 medal_data.append({"country": country, "gold": gold, "silver": silver, "bronze": bronze})
-        
-        # 순위 부여
-        medal_data = _assign_ranks(medal_data)
-        
-        logger.info("Loaded %d rows from local file", len(medal_data))
-        return medal_data
+
+        temp_sorted = sorted(medal_data, key=lambda x: (-x["gold"], -x["silver"], -x["bronze"]))
+        top10 = temp_sorted[:10]
+        ranked = _assign_ranks(top10)
+        for it in ranked:
+            it["gold"], it["silver"], it["bronze"] = str(it["gold"]), str(it["silver"]), str(it["bronze"])
+        return ranked
     except Exception:
         logger.exception("Error reading local medal.html")
         return []
@@ -176,7 +191,7 @@ def fetch_medals_from_local():
 @app.get("/medals")
 async def get_medals():
     global medal_cache
-    now = datetime.utcnow()
+    now = datetime.now()
     last = medal_cache["last_update"]
     if last and (now - last).total_seconds() < CACHE_SECONDS and medal_cache["data"]:
         return medal_cache["data"]
@@ -192,8 +207,7 @@ async def get_medals():
 @app.get("/")
 async def read_index():
     index_file = os.path.join(static_path, "index.html")
-    if os.path.exists(index_file):
-        return FileResponse(index_file)
+    if os.path.exists(index_file): return FileResponse(index_file)
     return {"error": "index.html not found"}
 
 @app.get("/health")
