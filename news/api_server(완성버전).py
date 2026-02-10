@@ -1,4 +1,4 @@
-import os
+﻿import os
 import re
 import unicodedata
 import requests
@@ -13,10 +13,6 @@ from starlette.concurrency import run_in_threadpool
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-#캐시 관련 전역 변수 설정
-cached_data = None
-last_fetch_time = 0
-CACHE_DURATION = 300  # 5분 캐시 유지
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -32,14 +28,7 @@ def _clean_text(text):
     return text.strip()
 
 def fetch_medals_from_web():
-    global cached_data, last_fetch_time
-    current_time = datetime.now().timestamp()
-    if cached_data and (current_time - last_fetch_time < CACHE_DURATION):
-        logger.info("캐시된 메달 데이터를 반환합니다.")
-        return cached_data
-    
     try:
-        logger.info("위키피디아에서 새로운 데이터를 가져옵니다.")
         url = "https://en.wikipedia.org/wiki/2026_Winter_Olympics_medal_table"
         headers = {"User-Agent": "Mozilla/5.0"}
         resp = requests.get(url, headers=headers, timeout=10)
@@ -128,21 +117,12 @@ def fetch_medals_from_web():
                 "silver": str(korea["silver"]),
                 "bronze": str(korea["bronze"])
             })
-        
-        # 2. 결과가 정상적일 때만 캐시 업데이트
-        if all_countries:
-            # (기존의 데이터 가공/정렬/한국 찾기 로직 수행 후)
-            # ... final_result 생성 완료 시점 ...
             
-            cached_data = final_result # 가공된 최종 리스트 저장
-            last_fetch_time = current_time
-            return final_result
-        
-        #return final_result
+        return final_result
 
     except Exception as e:
         logger.error(f"Error: {e}")
-        return cached_data if cached_data else []
+        return []
 
 @app.get("/medals")
 async def get_medals():
